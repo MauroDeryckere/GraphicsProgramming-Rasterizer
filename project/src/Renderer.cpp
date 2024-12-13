@@ -172,8 +172,10 @@ void dae::Renderer::RenderTriangle(Mesh const& m, std::vector<Vector2> const& ve
 	const Vector2 vert1{ vertices[idx2] };
 	const Vector2 vert2{ vertices[idx3] };
 	//Bounding boxes logic - only loop over pixels within the smallest possible bounding box
-	Vector2 topLeft{ Vector2::Min(vert0,Vector2::Min(vert1,vert2))  };
-	Vector2 topRight{ Vector2::Max(vert0,Vector2::Max(vert1,vert2))  };
+	Vector2 topLeft{ Vector2::Min(vert0,Vector2::Min(vert1,vert2)) - Vector2{1.f, 1.f} };
+	Vector2 topRight{ Vector2::Max(vert0,Vector2::Max(vert1,vert2)) + Vector2{1.f, 1.f} };
+
+
 		topLeft.x = Clamp(topLeft.x, 0.f, static_cast<float>(m_Width));
 		topLeft.y = Clamp(topLeft.y, 0.f, static_cast<float>(m_Height));
 		topRight.x = Clamp(topRight.x, 0.f, static_cast<float>(m_Width));
