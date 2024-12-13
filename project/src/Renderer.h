@@ -35,6 +35,11 @@ namespace dae
 
 		void VertexTransformationFunction(const std::vector<Vertex>& vertices_in, std::vector<Vertex_Out>& vertices_out) const;
 
+		void ToggleBoundingBoxes() noexcept
+		{
+			m_ShowBoundingBoxes = !m_ShowBoundingBoxes;
+		}
+
 	private:
 		SDL_Window* m_pWindow{};
 
@@ -48,5 +53,7 @@ namespace dae
 
 		int m_Width{};
 		int m_Height{};
+
+		bool m_ShowBoundingBoxes{ false };
 	};
 }

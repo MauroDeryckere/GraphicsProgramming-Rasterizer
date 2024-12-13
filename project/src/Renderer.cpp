@@ -71,29 +71,51 @@ void Renderer::Render()
 		vertices_screenSpace.emplace_back(Vector2{ x_screen, y_screen });
 	}
 
+	//rasterization stage: 
 	//for each triangle
 	for (uint32_t i{ 0 }; i < vertices_screenSpace.size(); i += 3)
 	{
-		for (int px{}; px < m_Width; ++px)
+		auto const idx1 = i;
+		auto const idx2 = i + 1;
+		auto const idx3 = i + 2;
+
+		const Vector2 vert0{ vertices_screenSpace[idx1] };
+		const Vector2 vert1{ vertices_screenSpace[idx2] };
+		const Vector2 vert2{ vertices_screenSpace[idx3] };
+
+		//if (vertices_screenSpace[idx1].x < -1.f || vertices_screenSpace[idx1].x > 1.f || vertices_screenSpace[idx1].y < -1.f || vertices_screenSpace[idx1].y > 1.f)
+		//{
+		//	continue;
+		//}
+		//if (vertices_screenSpace[idx2].x < -1.f || vertices_screenSpace[idx2].x > 1.f || vertices_screenSpace[idx2].y < -1.f || vertices_screenSpace[idx2].y > 1.f)
+		//{
+		//	continue;
+		//}
+		//if (vertices_screenSpace[idx3].x < -1.f || vertices_screenSpace[idx3].x > 1.f || vertices_screenSpace[idx3].y < -1.f || vertices_screenSpace[idx3].y > 1.f)
+		//{
+		//	continue;
+		//}
+
+		//Bounding boxes logic - only loop over pixels within the smallest possible bounding box
+		Vector2 topLeft{ Vector2::Min(vert0,Vector2::Min(vert1,vert2)) };
+		Vector2 topRight{ Vector2::Max(vert0,Vector2::Max(vert1,vert2)) };
+			topLeft.x = Clamp(topLeft.x, 0.f, static_cast<float>(m_Width));
+			topLeft.y = Clamp(topLeft.y, 0.f, static_cast<float>(m_Height));
+			topRight.x = Clamp(topRight.x, 0.f, static_cast<float>(m_Width));
+			topRight.y = Clamp(topRight.y, 0.f, static_cast<float>(m_Height));
+
+		for (int px{ static_cast<int>(topLeft.x) }; px < static_cast<int>(topRight.x); ++px)
 		{
-			for (int py{}; py < m_Height; ++py)
+			for (int py{ static_cast<int>(topLeft.y) }; py < static_cast<int>(topRight.y); ++py)
 			{
 				ColorRGB finalColor{};
 
-				auto const idx1 = i;
-				auto const idx2 = i + 1;
-				auto const idx3 = i + 2;
-
-				//rasterization stage: 
 				Vector2 const pixel{ px + .5f, py + .5f };
 				std::vector<Vector2> triangle{ vertices_screenSpace[idx1], vertices_screenSpace[idx2] , vertices_screenSpace[idx3] };
+
 				if (Utils::IsPixelInTriangle(pixel, triangle))
 				{
 					//Calculate barycentric coordinates
-					const Vector2 vert0{ vertices_screenSpace[idx1] };
-					const Vector2 vert1{ vertices_screenSpace[idx2] };
-					const Vector2 vert2{ vertices_screenSpace[idx3] };
-
 					float weight0, weight1, weight2;
 					weight0 = Vector2::Cross((pixel - vert1), (vert1 - vert2));
 					weight1 = Vector2::Cross((pixel - vert2), (vert2 - vert0));
@@ -110,10 +132,11 @@ void Renderer::Render()
 					const float depth2{ vertices_NDC[idx3].position.z };
 					const float interpolatedDepth{ 1.f / (weight0 * (1.f / depth0) + weight1 * (1.f / depth1) + weight2 * (1.f / depth2)) };
 
-					if (m_pDepthBufferPixels[px + py * m_Width] < interpolatedDepth || interpolatedDepth < 0.f || interpolatedDepth > 1.f) continue;
+					if (m_pDepthBufferPixels[px + py * m_Width] < interpolatedDepth || interpolatedDepth < 0.f || interpolatedDepth > 1.f)
 					{
-						m_pDepthBufferPixels[px + py * m_Width] = interpolatedDepth;
+						continue;
 					}
+					m_pDepthBufferPixels[px + py * m_Width] = interpolatedDepth;
 
 					const float r = weight0 * vertices_NDC[idx1].color.r + weight1 * vertices_NDC[idx2].color.r + weight2 * vertices_NDC[idx3].color.r;
 					const float g = weight0 * vertices_NDC[idx1].color.g + weight1 * vertices_NDC[idx2].color.g + weight2 * vertices_NDC[idx3].color.g;

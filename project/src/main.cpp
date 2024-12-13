@@ -70,6 +70,10 @@ int main(int argc, char* args[])
 				if (e.key.keysym.scancode == SDL_SCANCODE_X)
 					takeScreenshot = true;
 				break;
+			case SDL_SCANCODE_F1:
+				pRenderer->ToggleBoundingBoxes();
+				break;
+			
 			}
 		}
 

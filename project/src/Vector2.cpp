@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include <cmath>
+#include <algorithm>
 
 #include "MathHelpers.h"
 
@@ -15,6 +16,15 @@ namespace dae {
 
 
 	Vector2::Vector2(const Vector2& from, const Vector2& to) : x(to.x - from.x), y(to.y - from.y) {}
+
+	Vector2 Vector2::Min(Vector2 const& v1, Vector2 const& v2) noexcept
+	{
+		return { std::min(v1.x, v2.x), std::min(v1.y, v2.y) };
+	}
+	Vector2 Vector2::Max(Vector2 const& v1, Vector2 const& v2) noexcept
+	{
+		return { std::max(v1.x, v2.x), std::max(v1.y, v2.y) };
+	}
 
 	float Vector2::Magnitude() const
 	{

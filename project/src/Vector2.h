@@ -11,6 +11,9 @@ namespace dae
 		Vector2(float _x, float _y);
 		Vector2(const Vector2& from, const Vector2& to);
 
+		[[nodiscard]] static Vector2 Min(const Vector2& v1, const Vector2& v2) noexcept;
+		[[nodiscard]] static Vector2 Max(const Vector2& v1, const Vector2& v2) noexcept;
+
 		float Magnitude() const;
 		float SqrMagnitude() const;
 		float Normalize();
