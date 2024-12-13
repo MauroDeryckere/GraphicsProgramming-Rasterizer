@@ -150,6 +150,7 @@ void dae::Renderer::RenderTriangle(Mesh const& m, std::vector<Vector2> const& ve
 	const size_t idx2{ m.indices[startVertex + 1] };
 	const size_t idx3{ m.indices[startVertex + (!swapVertex * 2)] };
 
+	//Culling
 	if (idx1 == idx2 || idx2 == idx3 || idx3 == idx1)
 	{
 		return;
@@ -226,9 +227,6 @@ void dae::Renderer::RenderTriangle(Mesh const& m, std::vector<Vector2> const& ve
 			}
 			m_pDepthBufferPixels[px + py * m_Width] = interpolatedDepth;
 
-			//float const remap{ DepthRemap(interpolatedDepth, 0.9975f, 1.0f) };
-			//finalColor = ColorRGB(remap, remap, remap);
-
 			//Update Color in Buffer
 			Vertex_Out pixelToShade{};
 			pixelToShade.position = { float(px), float(py), interpolatedDepth,interpolatedDepth };
@@ -241,21 +239,22 @@ void dae::Renderer::RenderTriangle(Mesh const& m, std::vector<Vector2> const& ve
 			pixelToShade.color = finalColor;
 
 			pixelToShade.uv = interpolatedDepth * ((weight0 * m.vertices[idx1].uv) / depth0
-				+ (weight1 * m.vertices[idx2].uv) / depth1
-				+ (weight2 * m.vertices[idx3].uv) / depth2);
+												+ (weight1 * m.vertices[idx2].uv) / depth1
+												+ (weight2 * m.vertices[idx3].uv) / depth2);
 			pixelToShade.normal = Vector3{ interpolatedDepth * (weight0 * m.vertices_out[idx1].normal / m.vertices_out[idx1].position.w
 															  + weight1 * m.vertices_out[idx2].normal / m.vertices_out[idx2].position.w +
 																weight2 * m.vertices_out[idx3].normal / m.vertices_out[idx3].position.w) } / 3;
-			pixelToShade.normal.Normalize();
 			pixelToShade.tangent = Vector3{ interpolatedDepth * (weight0 * m.vertices_out[idx1].tangent / m.vertices_out[idx1].position.w +
 																 weight1 * m.vertices_out[idx2].tangent / m.vertices_out[idx2].position.w +
 																 weight2 * m.vertices_out[idx3].tangent / m.vertices_out[idx3].position.w) } / 3;
-			pixelToShade.tangent.Normalize();
 			pixelToShade.viewDirection = Vector3{ interpolatedDepth * (weight0 * m.vertices_out[idx1].viewDirection / m.vertices_out[idx1].position.w +
 																	   weight1 * m.vertices_out[idx2].viewDirection / m.vertices_out[idx2].position.w +
 																	   weight2 * m.vertices_out[idx3].viewDirection / m.vertices_out[idx3].position.w) } / 3;
-			pixelToShade.viewDirection.Normalize();
 			finalColor = PixelShading(m, pixelToShade);
+
+			//TODO
+			//float const remap{ DepthRemap(interpolatedDepth, 0.9975f, 1.0f) };
+			//finalColor *= ColorRGB(remap, remap, remap);
 
 			//Update Color in Buffer
 			finalColor.MaxToOne();
@@ -270,7 +269,6 @@ void dae::Renderer::RenderTriangle(Mesh const& m, std::vector<Vector2> const& ve
 ColorRGB dae::Renderer::PixelShading(Mesh const& m, Vertex_Out const& v)
 {
 	//Global light
-
 	Vector3 const lightDirection{ .577f, -.577f, .577f };
 	ColorRGB constexpr ambientColor{ 0.03f, 0.03f, 0.03f };
 
@@ -282,12 +280,12 @@ ColorRGB dae::Renderer::PixelShading(Mesh const& m, Vertex_Out const& v)
 	// Normal map
 	float observedArea{};
 
-	const Vector3 biNormal = Vector3::Cross(v.normal, v.tangent);
-	const Matrix tangentSpaceAxis = { v.tangent, biNormal, v.normal, Vector3::Zero };
+	Vector3 const biNormal = Vector3::Cross(v.normal, v.tangent);
+	Matrix const tangentSpaceAxis = { v.tangent, biNormal, v.normal, Vector3::Zero };
 
-	const ColorRGB normalColor = m.pNormal->Sample(v.uv);
-	Vector3 sampledNormal = { normalColor.r, normalColor.g, normalColor.b }; // => range [0, 1]
-	sampledNormal = 2.f * sampledNormal - Vector3{ 1, 1, 1 }; // => [0, 1] to [-1, 1]
+	ColorRGB const normalColor = m.pNormal->Sample(v.uv);
+	Vector3 sampledNormal = { normalColor.r, normalColor.g, normalColor.b }; //range [0, 1]
+	sampledNormal = 2.f * sampledNormal - Vector3{ 1, 1, 1 }; //[0, 1] to [-1, 1]
 	sampledNormal = tangentSpaceAxis.TransformVector(sampledNormal).Normalized();
 
 
@@ -319,15 +317,19 @@ ColorRGB dae::Renderer::PixelShading(Mesh const& m, Vertex_Out const& v)
 		}
 		case ShadingMode::Specular:
 		{
-			const ColorRGB specularColor{ m.pSpecular->Sample(v.uv) };
-			const float phongExp{ m.pGloss->Sample(v.uv).r * shininess };
+			//TODO move pong to BRDF
+			ColorRGB const specularColor{ m.pSpecular->Sample(v.uv) };
+			float const phongExp{ m.pGloss->Sample(v.uv).r * shininess };
 
-			const Vector3 reflect{ Vector3::Reflect(-lightDirection, sampledNormal) };
+			Vector3 const reflect{ Vector3::Reflect(-lightDirection, sampledNormal) };
 			float cosAngle{ Vector3::Dot(reflect, v.viewDirection) };
-			if (cosAngle < 0.f) cosAngle = 0.f;
+			if (cosAngle < 0.f)
+			{
+				cosAngle = 0.f;
+			}
 
-			const float specReflection{ 1.f *powf(cosAngle, phongExp) };
-			const ColorRGB phong{ specReflection * specularColor };
+			float const specReflection{ 1.f * powf(cosAngle, phongExp) };
+			ColorRGB const phong{ specReflection * specularColor };
 
 			result = phong * observedArea;
 			break;
@@ -335,16 +337,18 @@ ColorRGB dae::Renderer::PixelShading(Mesh const& m, Vertex_Out const& v)
 		case ShadingMode::Combined:
 		{
 			auto const lambert{ BRDF::Lambert(KD, m.pDiffuse->Sample(v.uv)) };
+			ColorRGB const specularColor{ m.pSpecular->Sample(v.uv) };
+			float const phongExp{ m.pGloss->Sample(v.uv).r * shininess };
 
-			const ColorRGB specularColor{ m.pSpecular->Sample(v.uv) };
-			const float phongExp{ m.pGloss->Sample(v.uv).r * shininess };
-
-			const Vector3 reflect{ Vector3::Reflect(-lightDirection, sampledNormal) };
+			Vector3 const reflect{ Vector3::Reflect(-lightDirection, sampledNormal) };
 			float cosAngle{ Vector3::Dot(reflect, v.viewDirection) };
-			if (cosAngle < 0.f) cosAngle = 0.f;
+			if (cosAngle < 0.f)
+			{
+				cosAngle = 0.f;
+			}
 
-			const float specReflection{ 1.f * powf(cosAngle, phongExp) };
-			const ColorRGB phong{ specReflection * specularColor };
+			 float const specReflection{ 1.f * powf(cosAngle, phongExp) };
+			 ColorRGB const phong{ specReflection * specularColor };
 
 			result =  observedArea * lambert + phong;
 			break;
