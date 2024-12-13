@@ -40,7 +40,7 @@ namespace dae
 		Matrix viewMatrix{};
 		Matrix projectionMatrix{};
 
-		void Initialize(float _aspectRatio, float _fovAngle = 90.f, Vector3 _origin = {0.f,0.f,0.f})
+		void Initialize(float _fovAngle = 90.f, Vector3 const& _origin = {0.f,0.f,0.f}, float _aspectRatio = 19.f / 6.f)
 		{
 			fovAngle = _fovAngle;
 			fov = tanf((fovAngle * TO_RADIANS) / 2.f);
@@ -51,6 +51,36 @@ namespace dae
 
 			CalculateProjectionMatrix();
 		}
+
+	#pragma region CameraSettings
+		void UpdateCameraSettings(float _fovAngle = 90.f, Vector3 const& _origin = { 0.f, 0.f, 0.f }, float _aspectRatio = 19.f / 6.f)
+		{
+			fovAngle = _fovAngle;
+			fov = tanf((fovAngle * TO_RADIANS) / 2.f);
+
+			origin = _origin;
+
+			aspectRatio = _aspectRatio;
+
+			CalculateProjectionMatrix();
+		}
+
+		void UpdateFov(float angle)
+		{
+			fovAngle = angle;
+			fov = tanf((fovAngle * TO_RADIANS) / 2.f);
+			CalculateProjectionMatrix();
+		}
+		void UpdateAspectRatio(float ratio)
+		{
+			aspectRatio = ratio;
+			CalculateProjectionMatrix();
+		}
+		void UpdateOrigin(Vector3 const& pos)
+		{
+			origin = pos;
+		}
+	#pragma endregion
 
 		void CalculateViewMatrix()
 		{
@@ -118,7 +148,6 @@ namespace dae
 
 			//Update Matrices
 			CalculateViewMatrix();
-			//CalculateProjectionMatrix(); //Try to optimize this - should only be called once or when fov/aspectRatio changes
 		}
 	};
 }
