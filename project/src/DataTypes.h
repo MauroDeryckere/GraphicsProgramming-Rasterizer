@@ -12,6 +12,12 @@ namespace dae
 		//Vector3 normal{}; //W4
 		//Vector3 tangent{}; //W4
 		//Vector3 viewDirection{}; //W4
+
+		Vertex() = default;
+		Vertex(Vector3 const& p):
+		position{p}
+		{}
+
 	};
 
 	struct Vertex_Out

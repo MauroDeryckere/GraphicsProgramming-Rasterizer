@@ -10,6 +10,23 @@ namespace dae
 {
 	namespace Utils
 	{
+		[[nodiscard]] bool IsPixelInTriangle(Vector2 pixel, std::vector<Vector2> const& triangle)
+		{
+			for (uint32_t i{ 0 }; i < triangle.size(); ++i)
+			{
+				auto const e{ triangle[(i + 1) % triangle.size()] - triangle[i] };
+				auto const p = pixel - triangle[i];
+
+				if (Vector2::Cross(e, p) < 0.f)
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+
 		//Just parses vertices and indices
 #pragma warning(push)
 #pragma warning(disable : 4505) //Warning unreferenced local function
