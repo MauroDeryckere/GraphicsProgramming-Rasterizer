@@ -95,7 +95,7 @@ namespace dae
 			Combined,
 			Count
 		};
-		ShadingMode m_CurrShadingMode{ ShadingMode::Combined };
+		ShadingMode m_CurrShadingMode{ ShadingMode::ObservedArea };
 
 		std::vector<Mesh> m_Meshes;
 

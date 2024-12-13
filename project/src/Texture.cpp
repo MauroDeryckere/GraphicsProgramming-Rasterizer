@@ -27,10 +27,8 @@ namespace dae
 
 	ColorRGB Texture::Sample(const Vector2& uv) const
 	{
-		float const u{ std::clamp(uv.x, 0.f, 1.f) };
-		float const v{ std::clamp(uv.y, 0.f, 1.f) };
-		uint32_t const x{ static_cast<uint32_t>(u * m_pSurface->w) };
-		uint32_t const y{ static_cast<uint32_t>(v * m_pSurface->h) };
+		uint32_t const x{ static_cast<uint32_t>(uv.x * m_pSurface->w) };
+		uint32_t const y{ static_cast<uint32_t>(uv.y * m_pSurface->h) };
 
 		uint8_t r{};
 		uint8_t g{};
