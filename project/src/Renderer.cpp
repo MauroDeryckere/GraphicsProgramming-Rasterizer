@@ -45,6 +45,12 @@ void Renderer::Render()
 	//Lock BackBuffer
 	SDL_LockSurface(m_pBackBuffer);
 
+	//empty the depth buffer at start of every render loop
+	std::fill_n(m_pDepthBufferPixels, (m_Width * m_Height), FLT_MAX);
+
+	//clear the background
+	SDL_FillRect(m_pBackBuffer, NULL, SDL_MapRGB(m_pBackBuffer->format, 0, 0, 0));
+
 	//vertices in world space
 	std::vector<Vertex> vertices_world
 	{
@@ -109,6 +115,18 @@ void Renderer::Render()
 			for (int py{ static_cast<int>(topLeft.y) }; py < static_cast<int>(topRight.y); ++py)
 			{
 				ColorRGB finalColor{};
+
+				if (m_ShowBoundingBoxes)
+				{
+					ColorRGB finalColor{ vertices_NDC[idx1].color };
+
+					m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
+						static_cast<uint8_t>(finalColor.r * 255),
+						static_cast<uint8_t>(finalColor.g * 255),
+						static_cast<uint8_t>(finalColor.b * 255));
+
+					continue;
+				}
 
 				Vector2 const pixel{ px + .5f, py + .5f };
 				std::vector<Vector2> triangle{ vertices_screenSpace[idx1], vertices_screenSpace[idx2] , vertices_screenSpace[idx3] };
