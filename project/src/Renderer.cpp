@@ -6,8 +6,11 @@
 #include "Renderer.h"
 #include "Renderer.h"
 #include "DataTypes.h"
+#include "BRDF.h"
 #include "Texture.h"
 #include "Utils.h"
+
+#include <iostream>
 
 using namespace dae;
 
@@ -26,7 +29,21 @@ Renderer::Renderer(SDL_Window* pWindow) :
 	std::fill_n(m_pDepthBufferPixels, (m_Width * m_Height), FLT_MAX);
 
 	//Initialize Camera
-	m_Camera.Initialize(60.f, { .0f,.0f,-10.f }, static_cast<float>(m_Width / m_Height));
+	m_Camera.Initialize(45.f, { .0f,5.f,-64.f }, static_cast<float>(m_Width / m_Height));
+
+	//Initialize the vehicle mesh
+	Mesh m{};
+	//parse the OBJ to load all required data
+	Utils::ParseOBJ("resources/vehicle.obj", m.vertices, m.indices);
+
+	//set vehicle textures - should be done through texture manager in bigger project to avoid copies and just maintain a reference the mesh
+	m.pDiffuse = std::make_shared<Texture>("resources/vehicle_diffuse.png");
+	m.pNormal = std::make_shared<Texture>("resources/vehicle_normal.png");
+	m.pSpecular = std::make_shared<Texture>("resources/vehicle_specular.png");
+	m.pGloss = std::make_shared<Texture>("resources/vehicle_gloss.png");
+
+	m.Translate({ 0.f, 0.f, 0.f });
+	m_Meshes.push_back(m);
 }
 
 Renderer::~Renderer()
@@ -37,6 +54,14 @@ Renderer::~Renderer()
 void Renderer::Update(Timer* pTimer)
 {
 	m_Camera.Update(pTimer);
+	if (m_IsRotating)
+	{
+		for (auto& m : m_Meshes)
+		{
+			float constexpr rotation{ 0.05f };
+			m.RotateY(rotation);
+		}
+	}
 }
 
 void Renderer::Render()
@@ -45,131 +70,38 @@ void Renderer::Render()
 	//Lock BackBuffer
 	SDL_LockSurface(m_pBackBuffer);
 
-	//empty the depth buffer at start of every render loop
-	std::fill_n(m_pDepthBufferPixels, (m_Width * m_Height), FLT_MAX);
+	std::fill_n(m_pDepthBufferPixels, m_Width * m_Height, FLT_MAX);
+	std::fill_n(m_pBackBufferPixels, m_Width * m_Height, 0);
 
 	//clear the background
-	SDL_FillRect(m_pBackBuffer, NULL, SDL_MapRGB(m_pBackBuffer->format, 0, 0, 0));
+	SDL_FillRect(m_pBackBuffer, NULL, SDL_MapRGB(m_pBackBuffer->format, 100, 100, 100));
 
-	//vertices in world space
-	std::vector<Vertex> vertices_world
-	{
-		{ {0.f, 2.f, 0.f}, {1,0,0} },
-		{ {1.5f, -1.f, 0.f}, {1,0,0} },
-		{ {-1.5f, -1.f, 0.f}, {1,0,0} },
-
-		{ { 0.f, 4.f, 2.f }, {1,0,0} },
-		{ {3.f, -2.f, 2.f}, {0,1,0} },
-		{ {-3.f, -2.f, 2.f}, {0,0,1} }
-	};
-
+	//Meshes defined in world space
 	//World -> NDC
-	std::vector<Vertex_Out> vertices_NDC{};
-		VertexTransformationFunction(vertices_world, vertices_NDC);
-
-	//convert each NDC coordinates to screen space / raster space
-	std::vector<Vector2> vertices_screenSpace{};
-	for (auto const& vertex : vertices_NDC)
+	for (auto& m : m_Meshes)
 	{
-		float const x_screen{ (vertex.position.x + 1) * 0.5f * m_Width };
-		float const y_screen{ (1 - vertex.position.y) * 0.5f * m_Height };
+		VertexTransformationFunction(m);
 
-		vertices_screenSpace.emplace_back(Vector2{ x_screen, y_screen });
-	}
-
-	//rasterization stage: 
-	//for each triangle
-	for (uint32_t i{ 0 }; i < vertices_screenSpace.size(); i += 3)
-	{
-		auto const idx1 = i;
-		auto const idx2 = i + 1;
-		auto const idx3 = i + 2;
-
-		const Vector2 vert0{ vertices_screenSpace[idx1] };
-		const Vector2 vert1{ vertices_screenSpace[idx2] };
-		const Vector2 vert2{ vertices_screenSpace[idx3] };
-
-		//if (vertices_screenSpace[idx1].x < -1.f || vertices_screenSpace[idx1].x > 1.f || vertices_screenSpace[idx1].y < -1.f || vertices_screenSpace[idx1].y > 1.f)
-		//{
-		//	continue;
-		//}
-		//if (vertices_screenSpace[idx2].x < -1.f || vertices_screenSpace[idx2].x > 1.f || vertices_screenSpace[idx2].y < -1.f || vertices_screenSpace[idx2].y > 1.f)
-		//{
-		//	continue;
-		//}
-		//if (vertices_screenSpace[idx3].x < -1.f || vertices_screenSpace[idx3].x > 1.f || vertices_screenSpace[idx3].y < -1.f || vertices_screenSpace[idx3].y > 1.f)
-		//{
-		//	continue;
-		//}
-
-		//Bounding boxes logic - only loop over pixels within the smallest possible bounding box
-		Vector2 topLeft{ Vector2::Min(vert0,Vector2::Min(vert1,vert2)) };
-		Vector2 topRight{ Vector2::Max(vert0,Vector2::Max(vert1,vert2)) };
-			topLeft.x = Clamp(topLeft.x, 0.f, static_cast<float>(m_Width));
-			topLeft.y = Clamp(topLeft.y, 0.f, static_cast<float>(m_Height));
-			topRight.x = Clamp(topRight.x, 0.f, static_cast<float>(m_Width));
-			topRight.y = Clamp(topRight.y, 0.f, static_cast<float>(m_Height));
-
-		for (int px{ static_cast<int>(topLeft.x) }; px < static_cast<int>(topRight.x); ++px)
+		//convert each NDC coordinates to screen space / raster space
+		std::vector<Vector2> vertices_screenSpace{};
+		for (auto const& vertex : m.vertices_out)
 		{
-			for (int py{ static_cast<int>(topLeft.y) }; py < static_cast<int>(topRight.y); ++py)
-			{
-				ColorRGB finalColor{};
+			float const x_screen{ (vertex.position.x + 1) * 0.5f * m_Width };
+			float const y_screen{ (1 - vertex.position.y) * 0.5f * m_Height };
 
-				if (m_ShowBoundingBoxes)
-				{
-					ColorRGB finalColor{ vertices_NDC[idx2].color };
+			vertices_screenSpace.emplace_back(Vector2{ x_screen, y_screen });
+		}
 
-					m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
-						static_cast<uint8_t>(finalColor.r * 255),
-						static_cast<uint8_t>(finalColor.g * 255),
-						static_cast<uint8_t>(finalColor.b * 255));
-
-					continue;
-				}
-
-				Vector2 const pixel{ px + .5f, py + .5f };
-				std::vector<Vector2> triangle{ vertices_screenSpace[idx1], vertices_screenSpace[idx2] , vertices_screenSpace[idx3] };
-
-				if (Utils::IsPixelInTriangle(pixel, triangle))
-				{
-					//Calculate barycentric coordinates
-					float weight0, weight1, weight2;
-					weight0 = Vector2::Cross((pixel - vert1), (vert1 - vert2));
-					weight1 = Vector2::Cross((pixel - vert2), (vert2 - vert0));
-					weight2 = Vector2::Cross((pixel - vert0), (vert0 - vert1));
-					// divide by total triangle area
-					const float totalTriangleArea{ Vector2::Cross(vert1 - vert0,vert2 - vert0) };
-					const float invTotalTriangleArea{ 1 / totalTriangleArea };
-					weight0 *= invTotalTriangleArea;
-					weight1 *= invTotalTriangleArea;
-					weight2 *= invTotalTriangleArea;
-
-					const float depth0{ vertices_NDC[idx1].position.z };
-					const float depth1{ vertices_NDC[idx2].position.z };
-					const float depth2{ vertices_NDC[idx3].position.z };
-					const float interpolatedDepth{ 1.f / (weight0 * (1.f / depth0) + weight1 * (1.f / depth1) + weight2 * (1.f / depth2)) };
-
-					if (m_pDepthBufferPixels[px + py * m_Width] < interpolatedDepth || interpolatedDepth < 0.f || interpolatedDepth > 1.f)
-					{
-						continue;
-					}
-					m_pDepthBufferPixels[px + py * m_Width] = interpolatedDepth;
-
-					const float r = weight0 * vertices_NDC[idx1].color.r + weight1 * vertices_NDC[idx2].color.r + weight2 * vertices_NDC[idx3].color.r;
-					const float g = weight0 * vertices_NDC[idx1].color.g + weight1 * vertices_NDC[idx2].color.g + weight2 * vertices_NDC[idx3].color.g;
-					const float b = weight0 * vertices_NDC[idx1].color.b + weight1 * vertices_NDC[idx2].color.b + weight2 * vertices_NDC[idx3].color.b;
-
-					finalColor = { r, g, b };
-				}
-
-				//Update Color in Buffer
-				finalColor.MaxToOne();
-				m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
-					static_cast<uint8_t>(finalColor.r * 255),
-					static_cast<uint8_t>(finalColor.g * 255),
-					static_cast<uint8_t>(finalColor.b * 255));
-			}
+		switch (m.primitiveTopology)
+		{
+		case PrimitiveTopology::TriangleList:
+			for (uint32_t v{ 0 }; v < m.indices.size(); v += 3)
+				RenderTriangle(m, vertices_screenSpace, v, false);
+			break;
+		case PrimitiveTopology::TriangleStrip:
+			for (uint32_t v{ 0 }; v < m.indices.size() - 2; ++v)
+				RenderTriangle(m, vertices_screenSpace, v, v % 2);
+			break;
 		}
 	}
 
@@ -180,32 +112,237 @@ void Renderer::Render()
 	SDL_UpdateWindowSurface(m_pWindow);
 }
 
-void Renderer::VertexTransformationFunction(const std::vector<Vertex>& vertices_in, std::vector<Vertex_Out>& vertices_out) const
+void Renderer::VertexTransformationFunction(Mesh& mesh) const
 {
 	//projection stage:
-
-	//mesh .worldmatrix * 
-	//model -> world space todo later
-
-	//world -> view space 
-	auto const m{ m_Camera.viewMatrix * m_Camera.projectionMatrix };
-	
-	vertices_out.reserve(vertices_in.size());
-	for(auto const& v : vertices_in)
+	//model -> world space -> world -> view space 
+	auto const m{ mesh.worldMatrix * m_Camera.viewMatrix * m_Camera.projectionMatrix };
+	mesh.vertices_out.clear();
+	mesh.vertices_out.reserve(mesh.vertices.size());
+	for(auto const& v : mesh.vertices)
 	{
 		Vertex_Out vOut{};
 		vOut.color = v.color;
+		vOut.uv = v.uv;
 
 		vOut.position = m.TransformPoint({ v.position, 1.f });
+		vOut.viewDirection = Vector3{ vOut.position.x, vOut.position.y, vOut.position.z }.Normalized();
+		vOut.normal = mesh.worldMatrix.TransformVector(v.normal);
+		vOut.tangent = mesh.worldMatrix.TransformVector(v.tangent);
 
 		//view -> clipping space (NDC)
 		float const inverseWComponent{ 1.f / vOut.position.w };
 		vOut.position.x *= inverseWComponent;
 		vOut.position.y *= inverseWComponent;
 		vOut.position.z *= inverseWComponent;
-	
-		vertices_out.emplace_back(vOut);
+		
+		mesh.vertices_out.emplace_back(vOut);
 	}
+}
+
+void dae::Renderer::RenderTriangle(Mesh const& m, std::vector<Vector2> const& vertices, uint32_t startVertex, bool swapVertex)
+{
+	//Rasterization stage
+	auto const idx1{ startVertex + (2 * static_cast<uint32_t>(swapVertex)) };
+	auto const idx2{ startVertex + 1 };
+	auto const idx3{ startVertex + (2 * static_cast<uint32_t>(!swapVertex)) };
+
+	if (idx1 == idx2 || idx2 == idx3 || idx3 == idx1)
+	{
+		return;
+	}
+
+	const Vector2 vert0{ vertices[idx1] };
+	const Vector2 vert1{ vertices[idx2] };
+	const Vector2 vert2{ vertices[idx3] };
+
+	if (m.vertices_out[idx1].position.x < -1.f || m.vertices_out[idx1].position.x > 1.f || m.vertices_out[idx1].position.y < -1.f || m.vertices_out[idx1].position.y > 1.f)
+	{
+		return;
+	}
+	if (m.vertices_out[idx2].position.x < -1.f || m.vertices_out[idx2].position.x > 1.f || m.vertices_out[idx2].position.y < -1.f || m.vertices_out[idx2].position.y > 1.f)
+	{
+		return;
+	}
+	if (m.vertices_out[idx3].position.x < -1.f || m.vertices_out[idx3].position.x > 1.f || m.vertices_out[idx3].position.y < -1.f || m.vertices_out[idx3].position.y > 1.f)
+	{
+		return;
+	}
+
+	//Bounding boxes logic - only loop over pixels within the smallest possible bounding box
+	Vector2 topLeft{ Vector2::Min(vert0,Vector2::Min(vert1,vert2))  };
+	Vector2 topRight{ Vector2::Max(vert0,Vector2::Max(vert1,vert2))  };
+		topLeft.x = Clamp(topLeft.x, 0.f, static_cast<float>(m_Width));
+		topLeft.y = Clamp(topLeft.y, 0.f, static_cast<float>(m_Height));
+		topRight.x = Clamp(topRight.x, 0.f, static_cast<float>(m_Width));
+		topRight.y = Clamp(topRight.y, 0.f, static_cast<float>(m_Height));
+
+	for (int px{ static_cast<int>(topLeft.x) }; px < static_cast<int>(topRight.x); ++px)
+	{
+		for (int py{ static_cast<int>(topLeft.y) }; py < static_cast<int>(topRight.y); ++py)
+		{
+			//if (m_pDepthBufferPixels[px + (py * m_Width)] > m.vertices_out[startVertex].position.z)
+			//{
+				ColorRGB finalColor{};
+
+				if (m_ShowBoundingBoxes)
+				{
+					finalColor = colors::White;
+
+					m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
+						static_cast<uint8_t>(finalColor.r * 255),
+						static_cast<uint8_t>(finalColor.g * 255),
+						static_cast<uint8_t>(finalColor.b * 255));
+
+					continue;
+				}
+
+				Vector2 const pixel{ px + .5f, py + .5f };
+
+				//Calculate barycentric coordinates
+				float weight0{ Vector2::Cross((pixel - vert1), (vert1 - vert2)) };
+				float weight1{ Vector2::Cross((pixel - vert2), (vert2 - vert0)) };
+				float weight2{ Vector2::Cross((pixel - vert0), (vert0 - vert1)) };
+
+				// not in triangle
+				if (weight0 < 0.f || weight1 < 0.f || weight2 < 0.f)
+					continue;
+
+				// divide by total triangle area && normalize
+				float const totalTriangleArea{ Vector2::Cross(vert1 - vert0,vert2 - vert0) };
+				float const invTotalTriangleArea{ 1 / totalTriangleArea };
+				weight0 *= invTotalTriangleArea;
+				weight1 *= invTotalTriangleArea;
+				weight2 *= invTotalTriangleArea;
+
+				float const depth0{ m.vertices_out[idx1].position.z };
+				float const depth1{ m.vertices_out[idx2].position.z };
+				float const depth2{ m.vertices_out[idx3].position.z };
+				float const interpolatedDepth{ 1.f / (weight0 * (1.f / depth0) + weight1 * (1.f / depth1) + weight2 * (1.f / depth2)) };
+
+				if (interpolatedDepth < 0.f || interpolatedDepth > 1.f || m_pDepthBufferPixels[px + py * m_Width] < interpolatedDepth)
+				{
+					continue;
+				}
+				m_pDepthBufferPixels[px + py * m_Width] = interpolatedDepth;
+
+				//float const remap{ DepthRemap(interpolatedDepth, 0.9975f, 1.0f) };
+				//finalColor = ColorRGB(remap, remap, remap);
+
+				//Update Color in Buffer
+				Vertex_Out pixelToShade{};
+				pixelToShade.position = { float(px), float(py), interpolatedDepth,interpolatedDepth };
+
+				const float r = weight0 * m.vertices_out[idx1].color.r + weight1 * m.vertices_out[idx2].color.r + weight2 * m.vertices_out[idx3].color.r;
+				const float g = weight0 * m.vertices_out[idx1].color.g + weight1 * m.vertices_out[idx2].color.g + weight2 * m.vertices_out[idx3].color.g;
+				const float b = weight0 * m.vertices_out[idx1].color.b + weight1 * m.vertices_out[idx2].color.b + weight2 * m.vertices_out[idx3].color.b;
+				
+				finalColor = { r, g, b };
+				pixelToShade.color = finalColor;
+
+				pixelToShade.uv = interpolatedDepth * ((weight0 * m.vertices[idx1].uv) / depth0
+					+ (weight1 * m.vertices[idx2].uv) / depth1
+					+ (weight2 * m.vertices[idx3].uv) / depth2);
+				pixelToShade.normal = Vector3{ interpolatedDepth * (weight0 * m.vertices_out[idx1].normal / m.vertices_out[idx1].position.w
+																  + weight1 * m.vertices_out[idx2].normal / m.vertices_out[idx2].position.w +
+																	weight2 * m.vertices_out[idx3].normal / m.vertices_out[idx3].position.w) } / 3;
+				pixelToShade.tangent = Vector3{ interpolatedDepth * (weight0 * m.vertices_out[idx1].tangent / m.vertices_out[idx1].position.w +
+																	 weight1 * m.vertices_out[idx2].tangent / m.vertices_out[idx2].position.w +
+																	 weight2 * m.vertices_out[idx3].tangent / m.vertices_out[idx3].position.w) } / 3;
+				pixelToShade.viewDirection = Vector3{ interpolatedDepth * (weight0 * m.vertices_out[idx1].viewDirection / m.vertices_out[idx1].position.w +
+																		   weight1 * m.vertices_out[idx2].viewDirection / m.vertices_out[idx2].position.w +
+																		   weight2 * m.vertices_out[idx3].viewDirection / m.vertices_out[idx3].position.w) } / 3;
+				pixelToShade.viewDirection.Normalize();
+				finalColor = PixelShading(m, pixelToShade);
+
+				//Update Color in Buffer
+				finalColor.MaxToOne();
+				m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
+					static_cast<uint8_t>(finalColor.r * 255),
+					static_cast<uint8_t>(finalColor.g * 255),
+					static_cast<uint8_t>(finalColor.b * 255));
+			//}
+		}
+	}
+}
+
+ColorRGB dae::Renderer::PixelShading(Mesh const& m, Vertex_Out const& v)
+{
+	//Global light
+	Vector3 const lightDirection{ .577f, -.577f, .577f };
+
+	ColorRGB result{ v.color };
+
+	float constexpr shininess{ 25.0f };
+	float constexpr KD{ 7.f };
+	ColorRGB constexpr ambientColor{ 0.03f, 0.03f, 0.03f };
+
+	Vector3 normal{ v.normal };
+
+	//calculate normal
+	if(m_UseNormalMapping)
+	{
+		Vector3 const biNor{ Vector3::Cross(v.normal, v.tangent) };
+		Matrix const tanSpace{ Matrix(v.tangent, biNor, v.normal, Vector3::Zero) };
+
+		const ColorRGB normalSampleVecCol{ (2 * m.pNormal->Sample(v.uv)) - ColorRGB{1,1,1} };
+		const Vector3 normalSampleVec{ normalSampleVecCol.r,normalSampleVecCol.g,normalSampleVecCol.b };
+		normal = tanSpace.TransformVector(normalSampleVec);
+
+		//auto const sample{ m.pNormal->Sample(v.uv) };
+		//normal -= { sample.r, sample.g, sample.b };
+		//normal *= 2.f;
+		//normal -= { 1.f, 1.f, 1.f };
+
+		//normal = tanSpace.TransformVector(normal);
+		normal.Normalize();
+	}
+	if (!m_ShowDepthBuffer)
+	{
+		float observedArea{ Utils::CalculateObservedArea(normal, lightDirection) };
+		switch (m_CurrShadingMode)
+		{
+		case ShadingMode::ObservedArea:
+		{
+			result += ColorRGB(observedArea, observedArea, observedArea);
+			break;
+		}
+		case ShadingMode::Diffuse:
+		{
+			auto const lambert{ BRDF::Lambert(KD, m.pDiffuse->Sample(v.uv)) };
+			result *= lambert * observedArea;
+			break;
+		}
+		case ShadingMode::Specular:
+		{
+			auto const phong = BRDF::Phong(m.pSpecular->Sample(v.uv).r, m.pGloss->Sample(v.uv).r * shininess, lightDirection, v.viewDirection, normal);
+			result *= phong * observedArea;
+			break;
+		}
+		case ShadingMode::Combined:
+		{
+			auto const lambert{ BRDF::Lambert(KD, m.pDiffuse->Sample(v.uv)) };
+			auto const phong = BRDF::Phong(m.pSpecular->Sample(v.uv).r, m.pGloss->Sample(v.uv).r * shininess, lightDirection, v.viewDirection, normal);
+
+			result *= lambert + phong * observedArea;
+			break;
+		}
+
+		}
+
+	}
+
+	result += ambientColor;
+	return result;
+}
+
+float dae::Renderer::DepthRemap(float v, float min, float max)
+{
+	float const normalizedValue{ (v - min) / (max - min) };
+	if (normalizedValue < 0.0f)
+		return 0.f;
+
+	return normalizedValue;
 }
 
 bool Renderer::SaveBufferToImage() const

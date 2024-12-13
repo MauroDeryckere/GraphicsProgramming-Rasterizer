@@ -73,6 +73,18 @@ int main(int argc, char* args[])
 				if (e.key.keysym.scancode == SDL_SCANCODE_F1)
 					pRenderer->ToggleBoundingBoxes();
 
+				if (e.key.keysym.scancode == SDL_SCANCODE_F4)
+					pRenderer->ToggleDepthBuffer();
+
+				if (e.key.keysym.scancode == SDL_SCANCODE_F5)
+					pRenderer->ToggleRotation();
+
+				if (e.key.keysym.scancode == SDL_SCANCODE_F6)
+					pRenderer->ToggleNormalMapping();
+
+				if (e.key.keysym.scancode == SDL_SCANCODE_F7)
+					pRenderer->CycleShadingMode();
+
 				break;
 			}
 		}

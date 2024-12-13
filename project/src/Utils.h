@@ -4,12 +4,21 @@
 #include "Maths.h"
 #include "DataTypes.h"
 
-#define DISABLE_OBJ
+// #define DISABLE_OBJ
 
 namespace dae
 {
 	namespace Utils
 	{
+		[[nodiscard]] float CalculateObservedArea(const Vector3& normal, const Vector3& lightDirection)
+		{
+			float const observedArea{ Vector3::Dot(normal, -lightDirection) };
+			if (observedArea < 0.f)
+				return 0.f;
+
+			return observedArea;
+		}
+
 		[[nodiscard]] bool IsPixelInTriangle(Vector2 pixel, std::vector<Vector2> const& triangle)
 		{
 			for (uint32_t i{ 0 }; i < triangle.size(); ++i)
