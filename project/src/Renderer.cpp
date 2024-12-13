@@ -23,6 +23,7 @@ Renderer::Renderer(SDL_Window* pWindow) :
 	m_pBackBufferPixels = (uint32_t*)m_pBackBuffer->pixels;
 
 	m_pDepthBufferPixels = new float[m_Width * m_Height];
+	std::fill_n(m_pDepthBufferPixels, (m_Width * m_Height), FLT_MAX);
 
 	//Initialize Camera
 	m_Camera.Initialize(static_cast<float>(m_Width / m_Height), 60.f, { .0f,.0f,-10.f });
@@ -44,24 +45,25 @@ void Renderer::Render()
 	//Lock BackBuffer
 	SDL_LockSurface(m_pBackBuffer);
 
-
-
 	//vertices in world space
-	std::vector<Vertex> triangle
+	std::vector<Vertex> vertices_world
 	{
-		{ {0.f, 4.f, 2.f}, {1,0,0} },
+		{ {0.f, 2.f, 0.f}, {1,0,0} },
+		{ {1.5f, -1.f, 0.f}, {1,0,0} },
+		{ {-1.5f, -1.f, 0.f}, {1,0,0} },
+
+		{ { 0.f, 4.f, 2.f }, {1,0,0} },
 		{ {3.f, -2.f, 2.f}, {0,1,0} },
 		{ {-3.f, -2.f, 2.f}, {0,0,1} }
 	};
 
-	//for each triangle: 
 	//World -> NDC
-	std::vector<Vertex_Out> triangleNDC{};
-		VertexTransformationFunction(triangle, triangleNDC);
+	std::vector<Vertex_Out> vertices_NDC{};
+		VertexTransformationFunction(vertices_world, vertices_NDC);
 
 	//convert each NDC coordinates to screen space / raster space
 	std::vector<Vector2> vertices_screenSpace{};
-	for (auto const& vertex : triangleNDC)
+	for (auto const& vertex : vertices_NDC)
 	{
 		float const x_screen{ (vertex.position.x + 1) * 0.5f * m_Width };
 		float const y_screen{ (1 - vertex.position.y) * 0.5f * m_Height };
@@ -69,49 +71,64 @@ void Renderer::Render()
 		vertices_screenSpace.emplace_back(Vector2{ x_screen, y_screen });
 	}
 
-	for (int px{}; px < m_Width; ++px)
+	//for each triangle
+	for (uint32_t i{ 0 }; i < vertices_screenSpace.size(); i += 3)
 	{
-		for (int py{}; py < m_Height; ++py)
+		for (int px{}; px < m_Width; ++px)
 		{
-			ColorRGB finalColor{};
+			for (int py{}; py < m_Height; ++py)
+			{
+				ColorRGB finalColor{};
 
-			//rasterization stage: 
-			Vector2 const pixel{ px + .5f, py + .5f };
-			if(Utils::IsPixelInTriangle(pixel, vertices_screenSpace))
-			{	
-				const Vector2 vert0{ vertices_screenSpace[0] };
-				const Vector2 vert1{ vertices_screenSpace[1] };
-				const Vector2 vert2{ vertices_screenSpace[2] };
+				auto const idx1 = i;
+				auto const idx2 = i + 1;
+				auto const idx3 = i + 2;
 
-				float weight0, weight1, weight2;
-				weight0 = Vector2::Cross((pixel - vert1), (vert1 - vert2));
-				weight1 = Vector2::Cross((pixel - vert2), (vert2 - vert0));
-				weight2 = Vector2::Cross((pixel - vert0), (vert0 - vert1));
-				// divide by total triangle area
-				const float totalTriangleArea{ Vector2::Cross(vert1 - vert0,vert2 - vert0) };
-				const float invTotalTriangleArea{ 1 / totalTriangleArea };
-				weight0 *= invTotalTriangleArea;
-				weight1 *= invTotalTriangleArea;
-				weight2 *= invTotalTriangleArea;
+				//rasterization stage: 
+				Vector2 const pixel{ px + .5f, py + .5f };
+				std::vector<Vector2> triangle{ vertices_screenSpace[idx1], vertices_screenSpace[idx2] , vertices_screenSpace[idx3] };
+				if (Utils::IsPixelInTriangle(pixel, triangle))
+				{
+					//Calculate barycentric coordinates
+					const Vector2 vert0{ vertices_screenSpace[idx1] };
+					const Vector2 vert1{ vertices_screenSpace[idx2] };
+					const Vector2 vert2{ vertices_screenSpace[idx3] };
 
-				const float depth0{ triangleNDC[0].position.z };
-				const float depth1{ triangleNDC[1].position.z };
-				const float depth2{ triangleNDC[2].position.z };
-				const float interpolatedDepth{ 1.f / (weight0 * (1.f / depth0) + weight1 * (1.f / depth1) + weight2 * (1.f / depth2)) };
+					float weight0, weight1, weight2;
+					weight0 = Vector2::Cross((pixel - vert1), (vert1 - vert2));
+					weight1 = Vector2::Cross((pixel - vert2), (vert2 - vert0));
+					weight2 = Vector2::Cross((pixel - vert0), (vert0 - vert1));
+					// divide by total triangle area
+					const float totalTriangleArea{ Vector2::Cross(vert1 - vert0,vert2 - vert0) };
+					const float invTotalTriangleArea{ 1 / totalTriangleArea };
+					weight0 *= invTotalTriangleArea;
+					weight1 *= invTotalTriangleArea;
+					weight2 *= invTotalTriangleArea;
 
-				const float r = weight0 * triangleNDC[0].color.r + weight1 * triangleNDC[1].color.r + weight2 * triangleNDC[2].color.r;
-				const float g = weight0 * triangleNDC[0].color.g + weight1 * triangleNDC[1].color.g + weight2 * triangleNDC[2].color.g;
-				const float b = weight0 * triangleNDC[0].color.b + weight1 * triangleNDC[1].color.b + weight2 * triangleNDC[2].color.b;
+					const float depth0{ vertices_NDC[idx1].position.z };
+					const float depth1{ vertices_NDC[idx2].position.z };
+					const float depth2{ vertices_NDC[idx3].position.z };
+					const float interpolatedDepth{ 1.f / (weight0 * (1.f / depth0) + weight1 * (1.f / depth1) + weight2 * (1.f / depth2)) };
 
-				finalColor = { r, g, b };
+					if (m_pDepthBufferPixels[px + py * m_Width] < interpolatedDepth || interpolatedDepth < 0.f || interpolatedDepth > 1.f) continue;
+					{
+						m_pDepthBufferPixels[px + py * m_Width] = interpolatedDepth;
+					}
+
+					const float r = weight0 * vertices_NDC[idx1].color.r + weight1 * vertices_NDC[idx2].color.r + weight2 * vertices_NDC[idx3].color.r;
+					const float g = weight0 * vertices_NDC[idx1].color.g + weight1 * vertices_NDC[idx2].color.g + weight2 * vertices_NDC[idx3].color.g;
+					const float b = weight0 * vertices_NDC[idx1].color.b + weight1 * vertices_NDC[idx2].color.b + weight2 * vertices_NDC[idx3].color.b;
+
+					finalColor = { r, g, b };
+				}
+
+				//Update Color in Buffer
+				finalColor.MaxToOne();
+				m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
+					static_cast<uint8_t>(finalColor.r * 255),
+					static_cast<uint8_t>(finalColor.g * 255),
+					static_cast<uint8_t>(finalColor.b * 255));
 			}
-
-			//Update Color in Buffer
-			finalColor.MaxToOne();
-			m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
-				static_cast<uint8_t>(finalColor.r * 255),
-				static_cast<uint8_t>(finalColor.g * 255),
-				static_cast<uint8_t>(finalColor.b * 255));
 		}
 	}
 
