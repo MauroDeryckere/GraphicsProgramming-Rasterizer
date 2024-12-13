@@ -118,7 +118,7 @@ void Renderer::Render()
 
 				if (m_ShowBoundingBoxes)
 				{
-					ColorRGB finalColor{ vertices_NDC[idx1].color };
+					ColorRGB finalColor{ vertices_NDC[idx2].color };
 
 					m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
 						static_cast<uint8_t>(finalColor.r * 255),

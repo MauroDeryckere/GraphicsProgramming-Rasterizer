@@ -31,7 +31,7 @@ namespace dae
 		float totalYaw{};
 
 		float movementSpeed{ 3.f };
-		float rotationSpeed{ 10.f };
+		float rotationSpeed{ .02f };
 
 		float nearPlane{ 0.1f };
 		float farPlane{ 100.f };
@@ -74,10 +74,12 @@ namespace dae
 		void Update(Timer* pTimer)
 		{
 			float const deltaTime{ pTimer->GetElapsed() };
-			Vector3 movementDir{ };
 
 			//Keyboard Input
 			uint8_t const* pKeyboardState{ SDL_GetKeyboardState(nullptr) };
+			
+			Vector3 movementDir{ };
+
 			if (pKeyboardState[SDL_SCANCODE_W])
 			{
 				movementDir += forward;
@@ -109,30 +111,14 @@ namespace dae
 
 			if (mouseState & SDL_BUTTON(SDL_BUTTON_LEFT))
 			{
-				UpdateCameraDirection(static_cast<float>(mouseX), static_cast<float>(mouseY), deltaTime);
+				forward = Matrix::CreateRotationY(mouseX * rotationSpeed).TransformVector(forward);
+				forward = Matrix::CreateRotationX(-mouseY * rotationSpeed).TransformVector(forward);
 			}
 
 
 			//Update Matrices
 			CalculateViewMatrix();
 			//CalculateProjectionMatrix(); //Try to optimize this - should only be called once or when fov/aspectRatio changes
-		}
-
-	private:
-		void UpdateCameraDirection(float deltaX, float deltaY, float deltaTime)
-		{
-			if (deltaX == 0.f && deltaY == 0.f)
-			{
-				return;
-			}
-
-			totalYaw -= deltaX * rotationSpeed * deltaTime;
-			totalPitch += deltaY * rotationSpeed * deltaTime;
-
-			auto const m{ Matrix::CreateRotation(TO_RADIANS * totalPitch, TO_RADIANS * totalYaw, 0.f) };
-
-			forward = m.TransformVector(Vector3::UnitZ);
-			forward.Normalize();
 		}
 	};
 }
