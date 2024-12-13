@@ -13,6 +13,7 @@ namespace dae
 	class Texture;
 	struct Mesh;
 	struct Vertex;
+	struct Vertex_Out;
 	class Timer;
 	class Scene;
 
@@ -32,7 +33,7 @@ namespace dae
 
 		bool SaveBufferToImage() const;
 
-		void VertexTransformationFunction(const std::vector<Vertex>& vertices_in, std::vector<Vertex>& vertices_out) const;
+		void VertexTransformationFunction(const std::vector<Vertex>& vertices_in, std::vector<Vertex_Out>& vertices_out) const;
 
 	private:
 		SDL_Window* m_pWindow{};
@@ -41,7 +42,7 @@ namespace dae
 		SDL_Surface* m_pBackBuffer{ nullptr };
 		uint32_t* m_pBackBufferPixels{};
 
-		//float* m_pDepthBufferPixels{};
+		float* m_pDepthBufferPixels{};
 
 		Camera m_Camera{};
 

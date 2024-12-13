@@ -15,8 +15,7 @@ namespace dae
 		Camera(const Vector3& _origin, float _fovAngle):
 			origin{_origin},
 			fovAngle{_fovAngle}
-		{
-		}
+		{ }
 
 
 		Vector3 origin{};
@@ -49,13 +48,14 @@ namespace dae
 			origin = _origin;
 
 			aspectRatio = _aspectRatio;
+
+			CalculateProjectionMatrix();
 		}
 
 		void CalculateViewMatrix()
 		{
-			Vector3 const r{ Vector3::Cross(Vector3::UnitY, forward) };
-			//right = r.Normalized();
-			up = Vector3::Cross(forward, r).Normalized();
+			right = Vector3::Cross(Vector3::UnitY, forward);
+			up = Vector3::Cross(forward, right);
 
 			invViewMatrix = { right, up, forward, origin };
 			viewMatrix = Matrix::Inverse(invViewMatrix);
@@ -113,10 +113,9 @@ namespace dae
 			}
 
 
-			//TODO
 			//Update Matrices
 			CalculateViewMatrix();
-			CalculateProjectionMatrix(); //Try to optimize this - should only be called once or when fov/aspectRatio changes
+			//CalculateProjectionMatrix(); //Try to optimize this - should only be called once or when fov/aspectRatio changes
 		}
 
 	private:

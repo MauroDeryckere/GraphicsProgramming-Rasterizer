@@ -14,8 +14,9 @@ namespace dae
 		//Vector3 viewDirection{}; //W4
 
 		Vertex() = default;
-		Vertex(Vector3 const& p):
-		position{p}
+		Vertex(Vector3 const& p, ColorRGB const& c = {}) :
+		position{p},
+		color{c}
 		{}
 
 	};
@@ -28,6 +29,10 @@ namespace dae
 		//Vector3 normal{};
 		//Vector3 tangent{};
 		//Vector3 viewDirection{};
+
+		Vertex_Out() = default;
+		Vertex_Out(Vector4 const& p) :
+			position{ p } {}
 	};
 
 	enum class PrimitiveTopology
