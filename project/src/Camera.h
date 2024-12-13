@@ -31,7 +31,7 @@ namespace dae
 		float totalYaw{};
 
 		float movementSpeed{ 3.f };
-		float rotationSpeed{ .02f };
+		float rotationSpeed{ 1.f };
 
 		float nearPlane{ 0.1f };
 		float farPlane{ 100.f };
@@ -110,23 +110,14 @@ namespace dae
 			
 			Vector3 movementDir{ };
 
-			if (pKeyboardState[SDL_SCANCODE_W])
-			{
+			if (pKeyboardState[SDL_SCANCODE_W] || pKeyboardState[SDL_SCANCODE_UP])
 				movementDir += forward;
-			}
-			if (pKeyboardState[SDL_SCANCODE_S])
-			{
+			if (pKeyboardState[SDL_SCANCODE_S] || pKeyboardState[SDL_SCANCODE_DOWN])
 				movementDir -= forward;
-			}
-
-			if (pKeyboardState[SDL_SCANCODE_A])
-			{
+			if (pKeyboardState[SDL_SCANCODE_A] || pKeyboardState[SDL_SCANCODE_LEFT])
 				movementDir -= right;
-			}
-			if (pKeyboardState[SDL_SCANCODE_D])
-			{
+			if (pKeyboardState[SDL_SCANCODE_D] || pKeyboardState[SDL_SCANCODE_RIGHT])
 				movementDir += right;
-			}
 
 			if (movementDir != Vector3::Zero)
 			{
@@ -139,11 +130,21 @@ namespace dae
 			int mouseY{};
 			uint32_t const mouseState{ SDL_GetRelativeMouseState(&mouseX, &mouseY) };
 
+			// LMB
 			if (mouseState & SDL_BUTTON(SDL_BUTTON_LEFT))
 			{
-				forward = Matrix::CreateRotationY(mouseX * rotationSpeed).TransformVector(forward);
-				forward = Matrix::CreateRotationX(-mouseY * rotationSpeed).TransformVector(forward);
+				origin += forward * (-mouseY * movementSpeed * deltaTime);
+				forward = Matrix::CreateRotationY(mouseX * rotationSpeed * deltaTime).TransformVector(forward);
 			}
+
+			// RMB
+			if (mouseState & SDL_BUTTON(SDL_BUTTON_RIGHT))
+			{
+				forward = Matrix::CreateRotationY(mouseX * rotationSpeed * deltaTime).TransformVector(forward);
+				forward = Matrix::CreateRotationX(-mouseY * rotationSpeed * deltaTime).TransformVector(forward);
+			}
+
+			//TODO move world Up/Down
 
 
 			//Update Matrices

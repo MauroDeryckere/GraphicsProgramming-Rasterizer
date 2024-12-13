@@ -26,7 +26,7 @@ Renderer::Renderer(SDL_Window* pWindow) :
 	std::fill_n(m_pDepthBufferPixels, (m_Width * m_Height), FLT_MAX);
 
 	//Initialize Camera
-	m_Camera.Initialize(static_cast<float>(m_Width / m_Height), 60.f, { .0f,.0f,-10.f });
+	m_Camera.Initialize(60.f, { .0f,.0f,-10.f }, static_cast<float>(m_Width / m_Height));
 }
 
 Renderer::~Renderer()

@@ -1,13 +1,19 @@
 #include "Texture.h"
 #include "Vector2.h"
 #include <SDL_image.h>
+#include <cassert>
 
 namespace dae
 {
-	Texture::Texture(SDL_Surface* pSurface) :
-		m_pSurface{ pSurface },
-		m_pSurfacePixels{ (uint32_t*)pSurface->pixels }
+	Texture::Texture(std::filesystem::path const& path)
 	{
+		assert(std::filesystem::exists(path));
+
+		m_pSurface = IMG_Load(path.string().c_str());
+		if(!m_pSurface)
+			throw std::runtime_error("Failed to load texture from path: " + path.string());
+		
+		m_pSurfacePixels = reinterpret_cast<uint32_t*>(m_pSurface->pixels);
 	}
 
 	Texture::~Texture()
@@ -19,20 +25,19 @@ namespace dae
 		}
 	}
 
-	Texture* Texture::LoadFromFile(const std::string& path)
-	{
-		//TODO
-		//Load SDL_Surface using IMG_LOAD
-		//Create & Return a new Texture Object (using SDL_Surface)
-
-		return nullptr;
-	}
-
 	ColorRGB Texture::Sample(const Vector2& uv) const
 	{
-		//TODO
-		//Sample the correct texel for the given uv
+		uint32_t const x{ static_cast<uint32_t>(uv.x * m_pSurface->w) };
+		uint32_t const y{ static_cast<uint32_t>(uv.y * m_pSurface->h) };
 
-		return {};
+		uint32_t const pixel{ m_pSurfacePixels[x + y * m_pSurface->w] };
+
+		Uint8 r{};
+		Uint8 g{};
+		Uint8 b{};
+		SDL_GetRGB(pixel, m_pSurface->format, &r, &g, &b);
+
+		static constexpr float normalizedFactor{ 1 / 255.f };
+		return { r * normalizedFactor, g * normalizedFactor, b * normalizedFactor };
 	}
 }
